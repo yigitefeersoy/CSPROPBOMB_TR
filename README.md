@@ -19,11 +19,11 @@ Projenin çalışması için gerekli temel kütüphaneler:
 
 ### Kullanılan Bileşenler
 
-- 3x4 Matris Tuş Takımı (Keypad)
+- 4x4 Matrix Keypad
 - I2C LCD Ekran 16x2
 - Buzzer
 - 2 Bacaklı Buton (İmha/Defuse için)
-- Arduino (Uno, Nano vb.)
+- Arduino Uno R3 Klon (CH340)
 - Bağlantı Kabloları
 
 ### Çalışma Mantığı
