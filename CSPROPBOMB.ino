@@ -1,213 +1,134 @@
-//********************************************
-//
-// @created_in: 2023-07-23
-// @lst_update: 2023-02-08 
-// @author: Arthur 'ArTDsL'/'ArThDsL' Dias dos Santos Lasso 
-// @project: Counter-Strike - PROP BOMB (https://github.com/ArTDsL/CSPROPBOMB)
-// 
-// [PROVIDED UNDER MIT LICENSE]
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-//
-//********************************************
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
-#include <LiquidCrystal.h>
-#include <ezButton.h>
-//variables
-int led_state = LOW;
-int contrast = 75;
-const byte LINES = 4;
-const byte COLS = 3;
-char * memclear = "";
-String password_store = "";
-String password = "";
-int pass_stored = 0;
-int bomb_status = 0;
-int bomb_idle = 0;
-int bomb_steps = 0;
-int bomb_count = 0;
-const int bomb_seconds_explosion = 45;
-unsigned long bomb_secs_prev = 0;
-long interval_bomb = 1000;
-int show_info = 0;
-//
-unsigned long buzzerled_prev = 0;
-long buzzerled_step = 1000;
-int bomb_ms[9] = {600, 600, 500, 400, 300, 200, 150, 100, 50};
-char keys[LINES][COLS] = {
-  {'1', '2', '3'},
-  {'4', '5', '6'},
-  {'7', '8', '9'},
-  {'*', '0', '#'}
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
+
+const byte ROWS = 4; 
+const byte COLS = 4; 
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'}, {'4','5','6','B'}, {'7','8','9','C'}, {'*','0','#','D'}
 };
-byte lineP[LINES] = {3, 8, 7, 5};
-byte colsP[COLS] = {4, 2, 6};
-//
-Keypad kpd = Keypad(makeKeymap(keys), lineP, colsP, LINES, COLS);
-LiquidCrystal lcd(9, 10, 11, 12, 13, A2);
-ezButton toggleSwitch(A4);
-//
+
+byte rowPins[ROWS] = {2, 3, 4, 5}; 
+byte colPins[COLS] = {7, 8, 9, 10}; 
+
+Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+const int buzzerPin = 6;
+const int buttonPin = 11;
+const int ledPin = 12;
+
+String password_store = "";
+bool bomb_active = false;
+unsigned long bomb_start_time = 0;
+const long bomb_duration = 45000; 
+unsigned long last_beep_time = 0;
+int defuse_progress = 0;
+
 void setup() {
-  Serial.begin(9600);
-  pinMode(A0, OUTPUT);
-  pinMode(A3, OUTPUT);
-  toggleSwitch.setDebounceTime(50);
-  analogWrite(A1, contrast);
-  lcd.begin(16, 2);
-  lcd.print("DEACTIVATED");
+  lcd.init();
+  lcd.backlight();
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+  
+  fullReset(); 
 }
-void BombBlew(){
-  tone(A3, 0, 100);
-  bomb_count = -1;
-  led_state = LOW;
-  buzzerled_step = 0;
-  lcd.clear();
-  delay(500);
-  lcd.print("BOOOOM!");
-  delay(10000);
-  AD_Bomb(false);
-  return;
-}
-void AD_Bomb(bool status){ //Activate / Deactivate Bomb
-  password_store = "";
-  pass_stored = 0;
-  password = "";
-  lcd.clear();
-  delay(500);
-  if(status == true){
-    lcd.print("ACTIVATED");
-    bomb_status = 1;
-    show_info = 0;
-  }else{
-    bomb_steps = 0;
-    bomb_secs_prev = 0;
-    buzzerled_prev = 0;
-    lcd.print("DEACTIVATED");
-    bomb_status = 0;
-    bomb_count = -1;
-  }
-}
-void ClearScreen(){
-  lcd.clear();
-  delay(500);
-}
-void BombAdjust(int BUZZERSTEP_PRM){
-  if(led_state == LOW){
-    led_state = HIGH;
-    buzzerled_step = bomb_ms[BUZZERSTEP_PRM];
-    tone(A3, 4096, bomb_ms[BUZZERSTEP_PRM]);
-  }else{
-    led_state = LOW;
-    buzzerled_step = bomb_ms[BUZZERSTEP_PRM];
-    tone(A3, 0, bomb_ms[BUZZERSTEP_PRM]);
-  }
-}
-void loop(){
-  toggleSwitch.loop();
-  if(toggleSwitch.getState() == HIGH && bomb_status == 0){
-    AD_Bomb(false);
-    lcd.clear();
-    bomb_idle = 1;
-    show_info = 0;
-    return;
-  }
-  if(toggleSwitch.getState() == HIGH && bomb_status == 1){
-    AD_Bomb(true);
-    lcd.clear();
-    bomb_idle = 1;
-    show_info = 0;
-    return;
-  }
-  if(bomb_status == 0 && toggleSwitch.getState() == LOW && bomb_idle == 0 && show_info == 0){
-    lcd.clear();
-    delay(500);
-    lcd.print("DEACTIVATED");
-    show_info = 1;
-  }
-  if(toggleSwitch.getState() == LOW && bomb_status == 0){
-    bomb_idle = 0;
-  }
+
+void loop() {
   char key = kpd.getKey();
-  if(password_store == "7355608"){
-    if(bomb_status == 0 && bomb_idle == 0){
-      AD_Bomb(true);
-      return;
-    }
-    if(bomb_status == 1){
-      AD_Bomb(false);
-      ClearScreen();
-      lcd.print("DEFUSED");
-      delay(1500);
-      ClearScreen();
-      lcd.print("DEACTIVATED");
-      bomb_status = 0;
-      return;
-    }
-  }
-  if(key && bomb_idle == 0){
-    //press # to reset bomb
-    if(strcmp(key, '#') == 0){
-      if(bomb_status == 1){
-        AD_Bomb(true);
-        return;
-      }
-      if(bomb_status == 0){
-        AD_Bomb(false);
-        return;
-      }
-    }
-    if(!strcmp(key, '#') == 0){
-      Serial.println(key); //debug
-      digitalWrite(A0, HIGH);
-      tone(A3, 4096, 200);
-      delay(100);
-      digitalWrite(A0, LOW);
-      tone(A3, 0, 100);
-      //deal with the password
-      lcd.clear();
-      delay(200);
-      password_store.concat(key);
-      pass_stored++;
-      lcd.setCursor(1, 0);
-      password.concat("*");
-      lcd.print(password);
-      return;
-    }
-  }
-  if(!key){
-    if(bomb_steps >= bomb_seconds_explosion){
-      BombBlew();
-    }
-    if(bomb_steps < bomb_seconds_explosion){
-      if(bomb_status == 1){
-        unsigned long bomb_secs_cur = millis();
-        unsigned long buzzerled_beep = millis();
-        if (buzzerled_beep - buzzerled_prev >= buzzerled_step){
-          buzzerled_prev = buzzerled_beep;
-          int seconds_square = int(sqrt(bomb_seconds_explosion));
-          if(bomb_count == -1 || bomb_count == 0){
-            bomb_count = 1;
-          }
-          if(bomb_count > 0){
-            if(bomb_steps >= (bomb_count * seconds_square)){
-              bomb_count += 1;
-            }
-          }
-          BombAdjust(bomb_count);
-          if(bomb_secs_cur - bomb_secs_prev >= interval_bomb){
-            bomb_secs_prev = bomb_secs_cur;
-            interval_bomb = 1000;
-            bomb_steps++;
-          }
-          digitalWrite(A0, led_state);
+
+  if (!bomb_active) {
+    if (key) {
+      tone(buzzerPin, 1000, 50);
+      if (key == '#') {
+        if (password_store == "7355608") activateBomb();
+        else {
+          lcd.clear();
+          lcd.print("KOD HATALI!");
+          delay(1500);
+          fullReset();
         }
-        return;
+      } else if (key == '*') {
+        fullReset();
+      } else {
+        password_store += key;
+        lcd.setCursor(0, 1);
+        lcd.print(password_store);
       }
     }
+  } else {
+    handleBombLogic();
   }
+}
+
+void fullReset() {
+  bomb_active = false;
+  password_store = "";
+  defuse_progress = 0;
+  bomb_start_time = 0;
+  last_beep_time = 0;
+  
+  digitalWrite(ledPin, LOW);
+  noTone(buzzerPin);
+  
+  lcd.clear();
+  lcd.print("SIFRE GIRIN:");
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
+}
+
+void activateBomb() {
+  bomb_active = true;
+  bomb_start_time = millis();
+  password_store = "";
+  lcd.clear();
+  lcd.print("BOMBA AKTIF!");
+  tone(buzzerPin, 1500, 500);
+  delay(1000);
+}
+
+void handleBombLogic() {
+  unsigned long current_time = millis();
+  long elapsed = current_time - bomb_start_time;
+  long remaining = (bomb_duration - elapsed) / 1000;
+
+  lcd.setCursor(0, 0);
+  lcd.print("SURE: ");
+  lcd.print(remaining);
+  lcd.print("s  ID:"); 
+  lcd.print(defuse_progress);
+  lcd.print("% ");
+
+  int beep_speed = map(remaining, 45, 0, 1000, 100);
+  if (current_time - last_beep_time >= beep_speed) {
+    tone(buzzerPin, 2000, 40);
+    digitalWrite(ledPin, !digitalRead(ledPin));
+    last_beep_time = current_time;
+  }
+
+  if (digitalRead(buttonPin) == LOW) {
+    defuse_progress++;
+    delay(50);
+    if (defuse_progress >= 100) {
+      lcd.clear();
+      lcd.print("IMHA EDILDI!");
+      tone(buzzerPin, 1200, 1000);
+      delay(3000);
+      fullReset();
+    }
+  } else {
+    defuse_progress = 0;
+  }
+
+  if (remaining <= 0) explode();
+}
+
+void explode() {
+  lcd.clear();
+  lcd.print("BOOOOM!");
+  tone(buzzerPin, 100, 3000);
+  delay(4000);
+  fullReset();  
 }
